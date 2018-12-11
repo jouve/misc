@@ -1,0 +1,81 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pgadmin4
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: pgadmin4
+  name: pgadmin4
+data:
+  user: cyril@localhost.localdomain
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: pgadmin4
+  name: pgadmin4
+data:
+  password: Y3lyaWw=
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: pgadmin4
+  name: pgadmin4
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: pgadmin4
+  name: pgadmin4
+spec:
+  selector:
+    matchLabels:
+      app: pgadmin4
+  template:
+    metadata:
+      labels:
+        app: pgadmin4
+    spec:
+      containers:
+      - name: gitea
+        image: jouve/pgadmin4:3.6-1
+        env:
+        - name: PGADMIN_SETUP_EMAIL
+          valueFrom:
+            configMapKeyRef:
+              name: pgadmin4
+              key: user
+        - name: PGADMIN_SETUP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgadmin4
+              key: password
+        volumeMounts:
+          - mountPath: /var/lib/pgadmin
+            name: data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: pgadmin4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: pgadmin4
+  name: pgadmin4
+spec:
+  selector:
+    app: pgadmin4
+  ports:
+  - name: http
+    port: 8000

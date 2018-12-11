@@ -1,0 +1,168 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitea
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: gitea
+  name: postgres
+data:
+  db: gitea
+  user: gitea
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: gitea
+  name: postgres
+data:
+  password: Z2l0ZWE=
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: gitea
+  name: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:11.1-alpine
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: postgres
+              key: user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres
+              key: password
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: postgres
+              key: db
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: data
+      - name: postgres-exporter
+        image: wrouesnel/postgres_exporter
+        env:
+        - name: DATA_SOURCE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: postgres
+              key: user
+        - name: DATA_SOURCE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: postgres
+              key: password
+        - name: DATA_SOURCE_URI
+          value: localhost/postgres?sslmode=disable
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: gitea
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - name: postgres
+    port: 5432
+  clusterIP: None
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: gitea
+  name: gitea
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: gitea
+  name: gitea
+spec:
+  selector:
+    matchLabels:
+      app: gitea
+  template:
+    metadata:
+      labels:
+        app: gitea
+    spec:
+      containers:
+      - name: gitea
+        image: gitea/gitea:1.6.1
+        env:
+        - name: DB_TYPE
+          value: postgres
+        - name: DB_HOST
+          value: postgres-0.postgres
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: postgres
+              key: db
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: postgres
+              key: user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres
+              key: password
+        volumeMounts:
+          - mountPath: /data
+            name: data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: gitea
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: gitea
+  name: gitea
+spec:
+  selector:
+    app: gitea
+  ports:
+  - name: http
+    port: 3000
+  - name: ssh
+    port: 22

@@ -1,0 +1,136 @@
+version: '2.4'
+services:
+  etcd0:
+    image: quay.io/coreos/etcd:v3.3.10
+    environment:
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd0:2379
+  etcd1:
+    image: quay.io/coreos/etcd:v3.3.10
+    environment:
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd0:2379
+  etcd2:
+    image: quay.io/coreos/etcd:v3.3.10
+    environment:
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd0:2379
+
+  patroni0:
+    image: postgres-patroni
+    volumes:
+    - ./patroni0:/srv
+  patroni0-exporter:
+    image: wrouesnel/postgres_exporter
+    environment:
+      DATA_SOURCE_NAME: postgres://admin:admin@patroni0/postgres?sslmode=disable
+
+  patroni1:
+    image: postgres-patroni
+    volumes:
+    - ./patroni1:/srv
+  patroni1-exporter:
+    image: wrouesnel/postgres_exporter
+    environment:
+      DATA_SOURCE_NAME: postgres://admin:admin@patroni1/postgres?sslmode=disable
+
+  haproxy:
+    image: haproxy:1.8.14-alpine
+    volumes:
+    - ./haproxy_etc:/usr/local/etc/haproxy
+    ports:
+    - 7000:7000
+    - 80:80
+  haproxy-exporter:
+    image: quay.io/prometheus/haproxy-exporter:v0.9.0
+    command:
+      - --haproxy.scrape-uri
+      - http://haproxy:8080/haproxy?stats;csv
+    ports:
+      - 9101:9101
+  haproxy-log:
+    image: s6-syslog
+
+  pgadmin4:
+    image: jouve/pgadmin4:3.6-1
+    environment:
+      PGADMIN_SETUP_EMAIL: cyril@localhost
+      PGADMIN_SETUP_PASSWORD: cyril
+    ports:
+    - 8000:8000
+
+  gitea:
+    image: gitea/gitea:1.6.1
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: haproxy:5432
+      DB_NAME: gitea
+      DB_USER: gitea
+      DB_PASSWORD: gitea
+    ports:
+    - 3000:3000
+
+  prometheus:
+    image: quay.io/prometheus/prometheus:v2.5.0
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus_etc:/etc/prometheus
+
+  grafana:
+    image: grafana/grafana:5.4.0
+    #ports:
+    #  - 3000:3000
+
+  debug:
+    image: alpine:3.8
+    command:
+    - tail
+    - -f
+    - /dev/null
+
+  fluentd:
+    image: fluentd
+    entrypoint: /bin/bash
+    command:
+    - -c
+    - fluentd -c /fluentd/etc/$${FLUENTD_CONF} -p /fluentd/plugins $$FLUENTD_OPT
+    volumes:
+    - /var/log/journal:/var/log/journal
+    - ./fluentd_etc:/fluentd/etc
+
+  elasticsearch1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.5.1
+    environment:
+      #discovery.type: single-node
+      cluster.name: docker-cluster
+      #bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xms128m -Xmx128m"
+    #ports:
+    #- 9200:9200
+    #- 9300:9300
+    volumes:
+      - esdata1:/usr/share/elasticsearch/data
+  elasticsearch2:
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.5.1
+    environment:
+      cluster.name: docker-cluster
+      #bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xms128m -Xmx128m"
+      discovery.zen.ping.unicast.hosts: elasticsearch1
+    #ports:
+    #- 9200:9200
+    #- 9300:9300
+    volumes:
+      - esdata2:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:6.5.1
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch1:9200
+    ports:
+    - 5601:5601
+
+volumes:
+  esdata1:
+  esdata2:

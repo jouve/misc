@@ -1,0 +1,95 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: haproxy
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: haproxy
+  name: haproxy
+data:
+  haproxy.cfg: |
+    global
+      log localhost local0
+
+    defaults
+        log global
+        mode http
+        timeout client 10s
+        timeout connect 10s
+        timeout server 10s
+
+    listen stats-exporter
+        bind :8080
+        stats enable
+
+    frontend http
+        bind :80
+        acl acl_dashboard hdr_dom(host) -i dashboard.local
+        acl acl_gitea hdr_dom(host) -i gitea.local
+        acl acl_pgadmin4 hdr_dom(host) -i pgadmin4.local
+        use_backend dashboard1 if acl_dashboard
+        use_backend gitea1 if acl_gitea
+        use_backend pgadmin41 if acl_pgadmin4
+
+    backend dashboard1
+        server dashboard1 kubernetes-dashboard.kube-system
+
+    backend gitea1
+        option httpchk GET /
+        server gitea1 gitea.gitea:3000 check
+
+    backend pgadmin41
+        option httpchk
+        server pgadmin41 pgadmin4.pgadmin4:8000 check
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: haproxy
+  name: haproxy
+spec:
+  selector:
+    matchLabels:
+      app: haproxy
+  template:
+    metadata:
+      labels:
+        app: haproxy
+    spec:
+      containers:
+      - name: syslog
+        image: jouve/socklog
+      - name: haproxy
+        image: haproxy:1.8.14-alpine
+        volumeMounts:
+          - mountPath: /usr/local/etc/haproxy
+            name: config
+      - name: haproxy-exporter
+        image: quay.io/prometheus/haproxy-exporter:v0.9.0
+        args:
+        - --haproxy.scrape-uri
+        - http://localhost:8080/haproxy?stats;csv
+      volumes:
+      - name: config
+        configMap:
+          name: haproxy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: haproxy
+  name: haproxy
+spec:
+  selector:
+    app: haproxy
+  ports:
+  - name: http
+    port: 80
+  - name: https
+    port: 443
+  - name: http-alt
+    port: 8080
+  type: NodePort

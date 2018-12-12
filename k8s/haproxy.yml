@@ -17,6 +17,7 @@ data:
     defaults
         log global
         mode http
+        option httplog
         timeout client 10s
         timeout connect 10s
         timeout server 10s
@@ -24,26 +25,46 @@ data:
     listen stats-exporter
         bind :8080
         stats enable
+        stats admin if TRUE
 
     frontend http
         bind :80
         acl acl_dashboard hdr_dom(host) -i dashboard.local
         acl acl_gitea hdr_dom(host) -i gitea.local
+        acl acl_grafana hdr_dom(host) -i grafana.local
+        acl acl_kibana hdr_dom(host) -i kibana.local
         acl acl_pgadmin4 hdr_dom(host) -i pgadmin4.local
+        acl acl_prometheus hdr_dom(host) -i prometheus.local
         use_backend dashboard1 if acl_dashboard
         use_backend gitea1 if acl_gitea
+        use_backend grafana1 if acl_grafana
+        use_backend kibana1 if acl_kibana
         use_backend pgadmin41 if acl_pgadmin4
+        use_backend prometheus1 if acl_prometheus
 
     backend dashboard1
-        server dashboard1 kubernetes-dashboard.kube-system
+        option httpchk
+        server dashboard1 kubernetes-dashboard.kube-system:9090 check
 
     backend gitea1
         option httpchk GET /
         server gitea1 gitea.gitea:3000 check
 
+    backend grafana1
+        option httpchk GET /
+        server grafana1 grafana.metrics:3000 check
+
+    backend kibana1
+        option httpchk GET /
+        server kibana1 kibana.logging:5601 check
+
     backend pgadmin41
         option httpchk
         server pgadmin41 pgadmin4.pgadmin4:8000 check
+
+    backend prometheus1
+        option httpchk GET /-/healthy
+        server prometheus1 prometheus.metrics:9090 check
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,6 +79,9 @@ spec:
     metadata:
       labels:
         app: haproxy
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
     spec:
       containers:
       - name: syslog

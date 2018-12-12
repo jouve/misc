@@ -1,0 +1,27 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: debug
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: debug
+  name: debug
+spec:
+  selector:
+    matchLabels:
+      app: debug
+  template:
+    metadata:
+      labels:
+        app: debug
+    spec:
+      containers:
+      - name: debug
+        image: alpine:3.8
+        args:
+        - tail
+        - -f
+        - /dev/null

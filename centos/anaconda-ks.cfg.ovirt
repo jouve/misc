@@ -1,0 +1,74 @@
+#version=DEVEL
+# System authorization information
+auth --enableshadow --passalgo=sha512
+# Use CDROM installation media
+cdrom
+# Use text install
+text
+# Run the Setup Agent on first boot
+firstboot --enable
+ignoredisk --only-use=sda
+# Keyboard layouts
+keyboard --vckeymap=fr --xlayouts='fr'
+# System language
+lang en_US.UTF-8
+
+# Network information
+network  --bootproto=dhcp --device=enp3s0 --activate
+network  --hostname=localhost.localdomain
+
+# Root password
+rootpw --iscrypted $6$ypkrf.sE$QT9nVhHVsFVv0rZnW1V.bRdaWwlcU9lLy5Amu/TI0TU3CCbMAz0dfylEWTL6YPqMe1vltw5b8nGtZ/h0k5lo1.
+
+# selinux
+selinux --permissive
+
+# connect by ssh
+sshpw --username=cjouve $6$f9R/4miFnA8M8Tbb$RhN37w26jh/zirWk0rIvCNKm1VnuQPhuFhmZJb9BrJlQK/8FHBYXTuUt8spmHSb.mBCxdRZiR5nMQ1Jb4jFiC1 --iscrypted
+
+# System services
+services --disabled="chronyd"
+# System timezone
+timezone Europe/Paris --isUtc --nontp
+user --groups=wheel --name=cjouve --password=$6$f9R/4miFnA8M8Tbb$RhN37w26jh/zirWk0rIvCNKm1VnuQPhuFhmZJb9BrJlQK/8FHBYXTuUt8spmHSb.mBCxdRZiR5nMQ1Jb4jFiC1 --iscrypted
+# System bootloader configuration
+bootloader --location=mbr --boot-drive=sda
+#autopart --type=lvm
+part /boot --fstype="xfs" --ondisk=sda --size=1024
+# https://access.redhat.com/discussions/1534853
+part /boot/efi --fstype vfat --size=256 --ondisk=sda
+part pv.280 --fstype="lvmpv" --ondisk=sda --size=53248 --grow
+volgroup centos pv.280
+logvol / --fstype="xfs" --size 25600 --name=root --vgname=centos
+logvol swap --fstype="swap" --size=2048 --name=swap --vgname=centos
+logvol /srv/ovirt-data --fstype="xfs" --size=25600 --grow --name srv_ovirt-data --vgname=centos
+
+# Partition clearing information
+clearpart --all --initlabel
+
+%packages
+@^minimal
+@core
+
+%end
+
+%addon com_redhat_kdump --disable --reserve-mb='auto'
+
+%end
+
+%anaconda
+pwpolicy root --minlen=6 --minquality=1 --notstrict --nochanges --notempty
+pwpolicy user --minlen=6 --minquality=1 --notstrict --nochanges --emptyok
+pwpolicy luks --minlen=6 --minquality=1 --notstrict --nochanges --notempty
+%end
+
+%post
+chown 36:36 /srv/ovirt-data
+chmod 0755 /srv/ovirt-data
+sudo -u cjouve mkdir ~/.ssh
+chmod 700 ~cjouve/.ssh
+cat <<EOF | sudo -u cjouve tee ~/.ssh/authorized_keys
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC6RhGRu59DJtDqmy7KvMRwkMOZ3SXKtK+W0KlnbasVKHucGTrxCJv3L0tla0wHELC8hxFjFJ+eCrfbSW83FGoJ13lhdQuLjfY1qoFbEgE4wMku8tl4e+lqPf3bXC1z489AEv0jdDFd0gG+7TyAMtjYsjayVYUJPq366HmnYWfxE6kbSguYGjiV0QckaelKK7kuui6B+ZN+ul4PNCWFMKjWK3hc69Xd7TPpMZFQIlTpeZ98Kezrr/kv0gWotYpX9iV/H7gqpCfMe8z1jCL5hxW+mW/m6YhU0ioW0DgIa3+/Jw9gm09v9tV9LxyDPIIY8EgSEMuxV3tDqml/MXAPnJPN
+EOF
+%end
+

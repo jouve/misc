@@ -1,0 +1,19 @@
+[[source]]
+url = 'https://pypi.org/simple'
+verify_ssl = true
+name = 'pypi'
+
+[packages]
+python-gitlab = '*'
+bcrypt = "*"
+"flake8" = "*"
+
+[dev-packages]
+unify = '*'
+yapf = '*'
+pyflakes = '*'
+pylint = '*'
+ipython = '*'
+
+[requires]
+python_version = '3.6'
